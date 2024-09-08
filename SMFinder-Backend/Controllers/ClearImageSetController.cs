@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;  // For file operations
+using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace SMFinder_Backend.Controllers
 {
@@ -8,29 +9,44 @@ namespace SMFinder_Backend.Controllers
     [ApiController]
     public class ClearImageSetController : ControllerBase
     {
-        private readonly IWebHostEnvironment _environment;  // To access web root path
+        private readonly IWebHostEnvironment _environment;
+        private readonly ILogger<ClearImageSetController> _logger;
 
-        public ClearImageSetController(IWebHostEnvironment environment)
+        public ClearImageSetController(IWebHostEnvironment environment, ILogger<ClearImageSetController> logger)
         {
             _environment = environment;
+            _logger = logger;
         }
 
         [HttpPost]
         public IActionResult ClearDataset()
         {
-            var datasetPath = Path.Combine(_environment.WebRootPath, "dataset");
-
-            // Clear old dataset files
-            if (Directory.Exists(datasetPath))
+            if (string.IsNullOrEmpty(_environment.WebRootPath))
             {
-                DirectoryInfo directory = new DirectoryInfo(datasetPath);
-                foreach (FileInfo file in directory.GetFiles())
-                {
-                    file.Delete();  // Delete each file
-                }
+                _logger.LogError("WebRootPath is not set.");
+                return StatusCode(StatusCodes.Status500InternalServerError, "Web root path is not set.");
             }
 
-            return Ok("ImageSet cleared successfully.");  // Return success message
+            var datasetPath = Path.Combine(_environment.WebRootPath, "dataset");
+
+            try
+            {
+                if (Directory.Exists(datasetPath))
+                {
+                    DirectoryInfo directory = new DirectoryInfo(datasetPath);
+                    foreach (FileInfo file in directory.GetFiles())
+                    {
+                        file.Delete();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while clearing dataset");
+                return StatusCode(StatusCodes.Status500InternalServerError, "An error occurred while clearing the dataset.");
+            }
+
+            return Ok("ImageSet cleared successfully.");
         }
     }
 }

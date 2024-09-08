@@ -1,8 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using OpenCvSharp;  // For image processing
-using System.IO;  // For file handling
-using System.Collections.Generic;  // For list of results
+using OpenCvSharp;
+using System.IO;
+using System.Collections.Generic;
+using Microsoft.Extensions.Logging;
 
 namespace SMFinder_Backend.Controllers
 {
@@ -10,64 +11,81 @@ namespace SMFinder_Backend.Controllers
     [ApiController]
     public class FindSimilarImagesController : ControllerBase
     {
-        private readonly IWebHostEnvironment _environment;  // To access web root path
+        private readonly IWebHostEnvironment _environment;
+        private readonly ILogger<FindSimilarImagesController> _logger;
 
-        public FindSimilarImagesController(IWebHostEnvironment environment)
+        public FindSimilarImagesController(IWebHostEnvironment environment, ILogger<FindSimilarImagesController> logger)
         {
             _environment = environment;
+            _logger = logger;
         }
 
         [HttpPost]
         public IActionResult FindSimilarImages([FromForm] IFormFile singleImage)
         {
+            if (singleImage == null)
+            {
+                return BadRequest("No image file was uploaded.");
+            }
+
+            if (string.IsNullOrEmpty(_environment.WebRootPath))
+            {
+                _logger.LogError("WebRootPath is not set.");
+                return StatusCode(StatusCodes.Status500InternalServerError, "Web root path is not set.");
+            }
+
             var datasetPath = Path.Combine(_environment.WebRootPath, "dataset");
             var uploadsPath = Path.Combine(_environment.WebRootPath, "uploads");
 
-            // Clear previous single image
-            if (Directory.Exists(uploadsPath))
+            try
             {
-                DirectoryInfo directory = new DirectoryInfo(uploadsPath);
-                foreach (FileInfo file in directory.GetFiles())
+                if (Directory.Exists(uploadsPath))
                 {
-                    file.Delete();  // Delete each file
+                    DirectoryInfo directory = new DirectoryInfo(uploadsPath);
+                    foreach (FileInfo file in directory.GetFiles())
+                    {
+                        file.Delete();
+                    }
                 }
+                else
+                {
+                    Directory.CreateDirectory(uploadsPath);
+                }
+
+                var uploadedImagePath = Path.Combine(uploadsPath, singleImage.FileName);
+                using (var stream = new FileStream(uploadedImagePath, FileMode.Create))
+                {
+                    singleImage.CopyTo(stream);
+                }
+
+                var similarImages = FindSimilarImages(uploadedImagePath, datasetPath);
+                return Ok(similarImages);
             }
-            else
+            catch (Exception ex)
             {
-                Directory.CreateDirectory(uploadsPath);  // Create directory if it does not exist
+                _logger.LogError(ex, "Error while finding similar images");
+                return StatusCode(StatusCodes.Status500InternalServerError, "An error occurred while processing the image.");
             }
-
-            // Save the new single image
-            var uploadedImagePath = Path.Combine(uploadsPath, singleImage.FileName);
-            using (var stream = new FileStream(uploadedImagePath, FileMode.Create))
-            {
-                singleImage.CopyTo(stream);  // Save image to server
-            }
-
-            // Find similar images in the dataset
-            var similarImages = FindSimilarImages(uploadedImagePath, datasetPath);
-
-            return Ok(similarImages);  // Return the list of similar images
         }
 
         private List<string> FindSimilarImages(string uploadedImagePath, string datasetPath)
         {
             List<string> similarImages = new List<string>();
-            Mat uploadedImage = Cv2.ImRead(uploadedImagePath, ImreadModes.Color);  // Read the uploaded image
+            Mat uploadedImage = Cv2.ImRead(uploadedImagePath, ImreadModes.Color);
 
-            foreach (var file in Directory.GetFiles(datasetPath))  // Iterate through the dataset
+            foreach (var file in Directory.GetFiles(datasetPath))
             {
-                Mat datasetImage = Cv2.ImRead(file, ImreadModes.Color);  // Read each image in the dataset
+                Mat datasetImage = Cv2.ImRead(file, ImreadModes.Color);
 
-                double similarity = CompareImages(uploadedImage, datasetImage);  // Compare images
+                double similarity = CompareImages(uploadedImage, datasetImage);
 
-                if (similarity > 0.9)  // Threshold for similarity
+                if (similarity > 0.9)
                 {
-                    similarImages.Add(file.Replace(_environment.WebRootPath, ""));  // Add relative path to results
+                    similarImages.Add(file.Replace(_environment.WebRootPath, ""));
                 }
             }
 
-            return similarImages;  // Return list of similar images
+            return similarImages;
         }
 
         private double CompareImages(Mat img1, Mat img2)
@@ -87,7 +105,7 @@ namespace SMFinder_Backend.Controllers
 
             double result = Cv2.CompareHist(hist1, hist2, HistCompMethods.Correl);
 
-            return result;  // Return similarity score
+            return result;
         }
     }
 }
