@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
 
+
+
 var options = new WebApplicationOptions
 {
     WebRootPath = "wwwroot" // Set web root path
@@ -33,6 +35,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.UseCors("AllowLocalhost");
