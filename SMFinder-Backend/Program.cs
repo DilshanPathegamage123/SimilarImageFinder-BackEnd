@@ -1,11 +1,18 @@
-var builder = WebApplication.CreateBuilder(args);
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Hosting;
+
+var options = new WebApplicationOptions
+{
+    WebRootPath = "wwwroot" // Set web root path
+};
+
+var builder = WebApplication.CreateBuilder(options);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
+builder.Services.AddControllersWithViews();
 
 builder.Services.AddCors(options =>
 {
@@ -27,10 +34,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
 app.UseCors("AllowLocalhost");
-
 app.MapControllers();
 
 app.Run();
