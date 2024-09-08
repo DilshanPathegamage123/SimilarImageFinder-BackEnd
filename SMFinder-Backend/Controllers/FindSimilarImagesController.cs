@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenCvSharp;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Extensions.Logging;
 
 namespace SMFinder_Backend.Controllers
@@ -23,9 +23,9 @@ namespace SMFinder_Backend.Controllers
         [HttpPost]
         public IActionResult FindSimilarImages([FromForm] IFormFile singleImage)
         {
-            if (singleImage == null)
+            if (singleImage == null || singleImage.Length == 0)
             {
-                return BadRequest("No image file was uploaded.");
+                return BadRequest("No image file or an empty file was uploaded.");
             }
 
             if (string.IsNullOrEmpty(_environment.WebRootPath))
@@ -39,15 +39,7 @@ namespace SMFinder_Backend.Controllers
 
             try
             {
-                if (Directory.Exists(uploadsPath))
-                {
-                    DirectoryInfo directory = new DirectoryInfo(uploadsPath);
-                    foreach (FileInfo file in directory.GetFiles())
-                    {
-                        file.Delete();
-                    }
-                }
-                else
+                if (!Directory.Exists(uploadsPath))
                 {
                     Directory.CreateDirectory(uploadsPath);
                 }
@@ -56,6 +48,12 @@ namespace SMFinder_Backend.Controllers
                 using (var stream = new FileStream(uploadedImagePath, FileMode.Create))
                 {
                     singleImage.CopyTo(stream);
+                }
+
+                if (!Directory.Exists(datasetPath) || Directory.GetFiles(datasetPath).Length == 0)
+                {
+                    _logger.LogError("Dataset directory is missing or empty.");
+                    return StatusCode(StatusCodes.Status500InternalServerError, "Dataset directory is missing or empty.");
                 }
 
                 var similarImages = FindSimilarImages(uploadedImagePath, datasetPath);
@@ -76,12 +74,11 @@ namespace SMFinder_Backend.Controllers
             foreach (var file in Directory.GetFiles(datasetPath))
             {
                 Mat datasetImage = Cv2.ImRead(file, ImreadModes.Color);
-
                 double similarity = CompareImages(uploadedImage, datasetImage);
 
-                if (similarity > 0.9)
+                if (similarity > 0.9) // Adjust similarity threshold as needed
                 {
-                    similarImages.Add(file.Replace(_environment.WebRootPath, ""));
+                    similarImages.Add(file.Replace(_environment.WebRootPath, "").Replace("\\", "/"));
                 }
             }
 
